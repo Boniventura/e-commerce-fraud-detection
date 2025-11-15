@@ -10,9 +10,14 @@ import utils
 CONFIG_FILE = "config.yaml"
 
 def main():
-  if __name__ == "__main__":
+	if __name__ == "__main__":
 
-    df, _ = utils.load_dataset()
-    utils.first_view_into_data(df)
+		df, path = utils.load_dataset()
+		# utils.first_view_into_data(df)
 
+
+		utils.feature_engineering(df)
+
+		utils.first_view_into_data(df)
+		utils.clean_dataset_path(path) 
 main()
