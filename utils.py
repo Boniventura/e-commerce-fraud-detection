@@ -1,3 +1,7 @@
+
+"""This file propbablye will not be used anymore"""
+
+
 """
 |--------------------------------------------------------------|
 |                          Requirements                        |
@@ -8,7 +12,6 @@ import pandas as pd
 from pprint import pprint
 import kagglehub
 import yaml
-import os
 from ydata_profiling import ProfileReport
 from pathlib import Path
 
@@ -27,24 +30,6 @@ REPORT_PATH = "report.html"
 |--------------------------------------------------------------|
 """
 
-def _load_config_file():
-	with open(CONFIG_FILE, 'r') as file:
-		config = yaml.safe_load(file)
-		dataset_kaggle_id = config['kaggle_data']['dataset_id']
-		dataset_csv_name = config['kaggle_data']['csv_filename']
-
-	return dataset_kaggle_id, dataset_csv_name
-
-def load_dataset():
-	dataset_kaggle_id, dataset_csv_name = _load_config_file()
-	try:  
-		path = kagglehub.dataset_download(dataset_kaggle_id)
-		df = pd.read_csv(f"{path}/{dataset_csv_name}", encoding='cp1250', sep=",", low_memory=False)
-		
-	except Exception as e:
-		print("Load data was not possible due to error.\n", e)
-
-	return df, path
 
 def _get_null_columns(df):
 	return df.isnull().sum()
@@ -97,7 +82,7 @@ def first_view_into_data(df):
 def clean_dataset_path(path):
 	pass
 	#tbd
-	# path_to_delete = Path(path)
+	# path_to_delete = Path(path) 
 	# try:
 	# 	path_to_delete.unlink()
 	# 	return True, f"File {path} has been deleted."
@@ -119,7 +104,7 @@ def _check_if_weekend_transaction(df, column_name='transaction_datetime'):
 	return df
 
 def _check_if_christmast_transaction(df, column_name='transaction_datetime'):
-	christmas_start = pd.Timestamp(year=df[column_name].dt.year.min(), month=12, day=1)
+	christmas_start = pd.Timestamp(year=df[column_name].dt.year.min(), month=12, day=15)
 	christmas_end = pd.Timestamp(year=df[column_name].dt.year.max(), month=12, day=26)
 	df['is_christmas_transaction'] = df[column_name].apply(lambda x: christmas_start <= x <= christmas_end)
 	return df
@@ -138,7 +123,7 @@ def _datetime_featuring(df):
 	df = _set_to_datetime(df)
 	df = _check_if_night_transaction(df)
 	df = _check_if_weekend_transaction(df)
-	# df = _check_if_christmast_transaction(df)
+	df = _check_if_christmast_transaction(df)
 
 	#delete original datetime column becase it is no longer used
 	df.drop('transaction_time', axis=1, inplace=True)
@@ -157,5 +142,4 @@ def feature_engineering(df):
 	df = _one_hot_encode_column(df, 'channel')
 	return df
 
-#Trzeba zrobic optiune i shap
 
