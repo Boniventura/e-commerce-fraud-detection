@@ -1,6 +1,8 @@
 from ydata_profiling import ProfileReport
-from pathlib import Path
 from pprint import pprint
+import seaborn as sns
+import matplotlib.pyplot as plt
+import src.common as common
 
 REPORT_PATH = "report.html"
 
@@ -9,8 +11,25 @@ class ExplaratoryDataAnalysis():
     
         self.dataset = dataset
 
+
+    @classmethod
+    def get_class_name(cls):
+            return cls.__name__
+    
     def _get_null_columns(self):
         return self.dataset.isnull().sum()
+    
+    def _get_dataset_head(self, n=5):
+        return self.dataset.head(n)
+    
+    def _get_dataset_info(self):
+        return self.dataset.info()
+    
+    def _get_dataset_description(self, numerics_only=False):
+        if numerics_only:
+            return self.dataset.describe()
+        else:
+            return self.dataset.describe(include='all')
 
     def _get_columns_with_nan(self):
         missing_data = self.dataset.isna().sum()
@@ -31,18 +50,70 @@ class ExplaratoryDataAnalysis():
             unique_values = self.dataset[column].unique()
             print(f"Column '{column}' has {len(unique_values)} unique values: {unique_values}")
 
-    def view_into_data(self, generate_html_report=False):
+    def _show_colleration_matrix(self):
+
+        df_numeric_only = self.dataset.select_dtypes(include=['number'])
+        correlation_matrix = df_numeric_only.corr()
+        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0,
+            square=True, linewidths=0.5 , fmt=".2f")
+        plt.title('Correlation Heatmap of Numerics Obbjects')
+        common.save_plot(folder_path=f'plots/{self.get_class_name()}', file_name='correlation_heatmap.png')
+        plt.show()
+        pprint(correlation_matrix)
+
+    def _check_fraud_amount(self):
+        fraud_counts = self.dataset['is_fraud'].value_counts()
+        fraud_percentage = self.dataset['is_fraud'].value_counts(normalize=True) * 100
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+        
+        sns.countplot(data=self.dataset, x='is_fraud', ax=ax1)
+        ax1.set_title('Amount of Fraud and Non-Fraud Transactions')
+        ax1.set_xlabel('Is Fraud')
+        ax1.set_ylabel('Count')
+        ax1.grid(axis='both', alpha=0.3)
+        
+        for p in ax1.patches:
+            height = p.get_height()
+            ax1.text(p.get_x() + p.get_width()/2., height,
+                    f'{int(height)}',
+                    ha="center", va="bottom", fontsize=10)
+            
+        bars = ax2.bar(range(len(fraud_percentage)), fraud_percentage.values, color=['green', 'red'])
+        ax2.set_title('Fraud vs Non-Fraud Transactions (Percentage) ')
+        ax2.set_xlabel('Is Fraud')
+        ax2.set_ylabel('Percentage (%)')
+        ax2.set_xticks(range(len(fraud_percentage)))
+        ax2.set_xticklabels(['Non-Fraud', 'Fraud'], rotation=0)
+        ax2.grid(axis='both', alpha=0.3)
+        for bar in bars:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.2f}%',
+                    ha="center", va="bottom", fontsize=10)
+        
+        plt.tight_layout()
+        common.save_plot(folder_path=f'plots/{self.get_class_name()}', file_name='is_fraud_analysis.png')
+        plt.show()
+        
+        print("\nFraud counts:")
+        pprint(fraud_counts)
+
+        print("\nFraud percentage:")
+        pprint(fraud_percentage)
+        
+    def view_into_data(self, generate_html_report=False,):
         print("\nFirst 5 rows of dataset:")
-        pprint(self.dataset.head())
+        pprint(self._get_dataset_head())
         
         print("\nDataset info:")
-        pprint(self.dataset.info())
+        pprint(self._get_dataset_info())
 
         print("\nDataset description for all columns:")
-        pprint(self.dataset.describe(include='all'))
+        pprint(self._get_dataset_description())
 
         print("\nDataset description for all numeric columns:")
-        pprint(self.dataset.describe())
+        pprint(self._get_dataset_description(numerics_only=True))
 
         print("\nNull values in each column:")
         pprint(self._get_null_columns())
@@ -52,8 +123,21 @@ class ExplaratoryDataAnalysis():
 
         print("\nUnique values in each column:")
         self._show_unique_values()
-        
+
         if generate_html_report:
             print("\n Generate HTML raport...")
-            print("temporary disabled")
-            # self._create_html_raport(title="Dataset before Feature Engineering" )
+            self._create_html_raport(title="Dataset before Feature Engineering" )
+        else :
+            print("\n Skipping HTML raport generation.")
+
+
+    def get_plots(self):
+
+        print("\nColleration matrix:")
+        self._show_colleration_matrix()
+
+        print("\nFraud amount analysis:")
+        self._check_fraud_amount()
+
+    def get_dataset(self):
+        return self.dataset
