@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import src.common as common
 import numpy as np
 import logging
+import os 
 
 REPORT_PATH = "report/"
 
@@ -12,8 +13,9 @@ logger = logging.getLogger(__name__)
 class ExplaratoryDataAnalysis():
     """ """
     
-    def __init__(self, dataset):
+    def __init__(self, dataset, show_plots = False):
         self.dataset = dataset
+        self.show_plots = show_plots
 
     @classmethod
     def get_class_name(cls):
@@ -45,6 +47,7 @@ class ExplaratoryDataAnalysis():
 
 
     def _create_html_raport(self, title):
+        path = os.path.join(REPORT_PATH, title)
         profile = ProfileReport(self.dataset, title=title,
                         explorative=True, correlations = {
                         "pearson": {"calculate": True},
@@ -52,9 +55,7 @@ class ExplaratoryDataAnalysis():
                         "kendall": {"calculate": True}})
         
         common.check_if_path_exists(folder_path=REPORT_PATH)
-
-        profile.to_file(REPORT_PATH)
-        logger.info(f"Report saved to the {REPORT_PATH}")
+        profile.to_file(path)
 
 
     def _check_amounts_distribution(self, folder_name="BeforeFeatureEngineering"):
@@ -135,7 +136,6 @@ class ExplaratoryDataAnalysis():
         logger.info("\nFraud percentage:")
         pprint(fraud_percentage)
     
-
     def view_into_data(self):
         logger.info("\nFirst 5 rows of dataset:")
         pprint(self._get_dataset_head())
@@ -162,6 +162,7 @@ class ExplaratoryDataAnalysis():
         if generate_html_report:
             logger.info("\n Generate HTML raport...")
             self._create_html_raport(title=title)
+            logger.info(f"Report saved to the {REPORT_PATH +'/'+ title}")
         else :
             logger.warning("\n Skipping HTML raport generation.")
 
@@ -177,11 +178,8 @@ class ExplaratoryDataAnalysis():
         logger.info("\nColleration matrix:")
         self._show_colleration_matrix(folder_name)
 
-        plt.show()
+        if self.show_plots:
+            plt.show()
 
     def get_dataset(self):
         return self.dataset
-    
-
-    def train_test_split(self, test_size=0.2, random_state=42):
-        pass

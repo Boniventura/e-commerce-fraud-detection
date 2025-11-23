@@ -1,8 +1,6 @@
 import os 
 import matplotlib.pyplot as plt
-import pandas as pd
-import logging
-logger = logging.getLogger(__name__)
+
 
 def check_if_path_exists(folder_path = None):
     try:
