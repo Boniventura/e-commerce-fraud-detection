@@ -4,11 +4,18 @@ import pandas as pd
 import logging
 logger = logging.getLogger(__name__)
 
+def check_if_path_exists(folder_path = None):
+    try:
+        os.makedirs(folder_path, exist_ok=True) 
+    except Exception as e:
+        print(f"Can not create the folder path: {folder_path}. Error: {e}")
+
+
 def save_plot(folder_path = None, file_name = None):
     try: 
         full_path = f'{folder_path}/{file_name}'
-
-        os.makedirs(folder_path, exist_ok=True) 
+        
+        check_if_path_exists(folder_path)
 
         plt.savefig(full_path, dpi=300, bbox_inches='tight')
 
