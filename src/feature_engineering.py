@@ -1,6 +1,9 @@
 import pandas as pd
 from pprint import pprint
+import logging
+import src.common as common
 
+logger = logging.getLogger(__name__)
 class FeatureEngineering():
     def __init__(self, dataset):
         self.dataset = dataset
@@ -19,9 +22,8 @@ class FeatureEngineering():
     def _check_if_christmast_transaction(self, column_name='transaction_datetime'):
         isDecember = self.dataset[column_name].dt.month.isin([12]).astype(int)
         isNearChristmas = self.dataset[column_name].dt.day.isin(range(15,27)).astype(int)
-
         self.dataset['is_christmas_transaction'] = (isDecember & isNearChristmas).astype(int)
-
+            
     def _one_hot_encode_column(self, column_name):
         dummies = pd.get_dummies(self.dataset[column_name], prefix=column_name)
 
@@ -41,16 +43,29 @@ class FeatureEngineering():
     def _check_if_country_mismatch(self):
         self.dataset['is_country_mismatch'] = (self.dataset['country'] != self.dataset['bin_country']).astype(int)
 
-    def _drop_unused_columns(self, list_of_columns):
-        self.dataset.drop(list_of_columns, axis=1, inplace=True, errors='ignore')
+    def _check_if_column_is_unique(self):
+        print(self.dataset.columns)
+        for column_name in self.dataset.columns:
+            unique_values = set(self.dataset[column_name].unique())
+            if unique_values == {0} or unique_values == {1}:
+                self.dataset.drop(column_name, axis=1, inplace=True, errors='ignore')
+                logger.warning(f"Warning: Feature '{column_name}' dropped due to zero variance.")
 
+
+    def _add_account_age_features(self):
+        self.dataset['is_new_account'] = (self.dataset['account_age_days'] < 30).astype(int)
+        self.dataset['is_old_account'] = (self.dataset['account_age_days'] > 365).astype(int)
+        
+ 
     def run_feature_engineering(self):
-        # Main function to run all feature engineering steps and return modified dataset
         self._datetime_featuring()
         self._check_if_country_mismatch()
+        self._check_if_christmast_transaction()
+        self._add_account_age_features()
         self._one_hot_encode_column('merchant_category')
         self._one_hot_encode_column('channel')
-        #add columns to drop if needed
-        self._drop_unused_columns([])
+
+        self._check_if_column_is_unique()    
+
 
         return self.dataset
