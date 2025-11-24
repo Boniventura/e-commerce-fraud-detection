@@ -41,7 +41,6 @@ class FeatureEngineering():
         self.dataset['is_country_mismatch'] = (self.dataset['country'] != self.dataset['bin_country']).astype(int)
 
     def _check_if_column_is_unique(self):
-        print(self.dataset.columns)
         for column_name in self.dataset.columns:
             unique_values = set(self.dataset[column_name].unique())
             if unique_values == {0} or unique_values == {1}:
@@ -56,6 +55,7 @@ class FeatureEngineering():
     def _add_amount_indicators(self):
         self.dataset["user_std_amount"]= self.dataset.groupby('user_id')['amount'].agg(['std'])
         self.dataset['user_std_amount'] = self.dataset['user_std_amount'].fillna(0)
+
         # (zscore = (x-mu )/sigma)
         self.dataset['zscore_amount_user'] = (self.dataset['amount'] - self.dataset['avg_amount_user']) / self.dataset['user_std_amount']
         self.dataset['zscore_amount_user'] = self.dataset['zscore_amount_user'].replace([np.inf, -np.inf, np.nan], 0)
@@ -63,17 +63,21 @@ class FeatureEngineering():
         self.dataset['amount'] > (self.dataset['avg_amount_user'] + 2 * self.dataset['user_std_amount'])).astype(int)
 
 
-    def _use_log1p(self, column_name):
-        column = self.dataset[column_name].astype(float)
-        self.dataset[column_name] = np.log1p(column)
-        self.dataset[column_name + "_log1p"] = self.dataset[column_name]
+    def _transform_log1p(self, column_name):
+        column_values = self.dataset[column_name].astype(float)
+        column_values = column_values.clip(lower=0)
+        column_values = column_values.fillna(0) 
+        self.dataset[column_name + "_log1p"] = np.log1p(column_values)
         self.unused_columns.append(column_name)
 
 
     def _delete_unused_columns(self, unused_columns: list):
         unused_columns += self.unused_columns
+        
+        #cast to set to avoid duplications 
+        self.unused_columns = set(self.unused_columns)
         for column in unused_columns:
-            self.dataset.drop(column, axis = 1, inplace = True )
+            self.dataset.drop(columns = column, axis = 1, inplace = True )
 
 
     def _run_all_one_hot_encodings(self):
@@ -81,15 +85,14 @@ class FeatureEngineering():
         self._one_hot_encode_column('channel')
         self._one_hot_encode_column('country')
         self._one_hot_encode_column('bin_country')
-        self._one_hot_encode_column('channel')
 
 
     def _run_all_log1p_transforms(self):
-        self._use_log1p("user_std_amount")
-        self._use_log1p("zscore_amount_user")
-        self._use_log1p("shipping_distance_km")
-        self._use_log1p("amount")
-        self._use_log1p("avg_amount_user")
+        self._transform_log1p("user_std_amount")
+        self._transform_log1p("zscore_amount_user")
+        self._transform_log1p("shipping_distance_km")
+        self._transform_log1p("amount")
+        self._transform_log1p("avg_amount_user")
 
 
     def run_feature_engineering(self):
@@ -98,8 +101,11 @@ class FeatureEngineering():
         self._add_amount_indicators()
         self._datetime_featuring()
         self._run_all_log1p_transforms()
+        self._run_all_one_hot_encodings()
 
-        self._check_if_column_is_unique()  
-        self._delete_unused_columns(['user_id', 'transaction_id', "country", "bin_country"])
+        self._check_if_column_is_unique()
+
+        #must be called as the last one because it deletes columns 
+        self._delete_unused_columns(['user_id', 'transaction_id'])
 
         return self.dataset
