@@ -12,7 +12,7 @@ def check_if_path_exists(folder_path = None):
 def save_plot(folder_path = None, file_name = None):
     try: 
         full_path = f'{folder_path}/{file_name}'
-        
+
         check_if_path_exists(folder_path)
 
         plt.savefig(full_path, dpi=300, bbox_inches='tight')
@@ -21,4 +21,3 @@ def save_plot(folder_path = None, file_name = None):
 
     except Exception as e:
         print(f"Can not save the plot. Error: {e}")
-
