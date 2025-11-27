@@ -1,3 +1,7 @@
+#|--------------------------------------------------------------|
+#|                          Requirements                        |
+#|--------------------------------------------------------------|
+
 from ydata_profiling import ProfileReport
 from pprint import pprint
 import seaborn as sns
@@ -7,7 +11,15 @@ import numpy as np
 import logging
 import os 
 
+#|--------------------------------------------------------------|
+#|                          Macors                              |
+#|--------------------------------------------------------------|
+
 REPORT_PATH = "report/"
+
+#|--------------------------------------------------------------|
+#|                          Main part                           |
+#|--------------------------------------------------------------|
 
 logger = logging.getLogger(__name__)
 class ExplaratoryDataAnalysis():
