@@ -215,3 +215,250 @@ class LogisticRegressionBenchmark:
             pickle.dump(self.get_model(), f)
         logger.info(f"Benchmark model saved to {filepath}")
         return filepath
+    
+    
+## SECTION 3: MODEL EVALUATION
+class XGBoostModelEvaluation:
+    def __init__(self, model, prepared_data):
+        self.model = model
+        self.model_named_steps = model.named_steps['xgbclassifier']
+        self.X_train = prepared_data["X_train"]
+        self.X_test = prepared_data["X_test"]
+        self.y_train = prepared_data["y_train"]
+        self.y_test = prepared_data["y_test"]
+        self.feature_names = prepared_data["feature_names"]
+        self.metrics = {}
+
+    def _evaluate_model(self):
+        logger.info("Evaluating model...")
+
+        y_pred = self.model.predict(self.X_test)
+        y_pred_probability = self.model.predict_proba(self.X_test)[:, 1]
+        precision = precision_score(self.y_test, y_pred)
+        recall = recall_score(self.y_test, y_pred)
+
+        self.metrics = {
+            'accuracy': accuracy_score(self.y_test, y_pred), #(TP + TN) / (TP + TN + FP + FN}
+            'roc_auc': roc_auc_score(self.y_test, y_pred_probability),
+            'precision': precision, #TP / (TP + FP),
+            'recall': recall} #TP / (TP + FN)
+
+        logger.info("MODEL EVALUATION RESULTS")
+        logger.info(f"Accuracy:  {self.metrics['accuracy']:.4f}")
+        logger.info(f"ROC-AUC:   {self.metrics['roc_auc']:.4f}")
+
+        report = classification_report(self.y_test, y_pred)
+        logger.info("\nClassification Report:\n" + report)
+        self.metrics['classification_report'] = classification_report(self.y_test, y_pred, output_dict=True)
+
+        self.y_pred = y_pred
+        self.y_pred_probability = y_pred_probability
+
+        return self.metrics
+
+    def _plot_confusion_matrix(self):
+        common.check_if_path_exists(PLOTS_PATH)
+
+        cm = confusion_matrix(self.y_test, self.y_pred)
+
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=['Non-Fraud', 'Fraud'],
+                    yticklabels=['Non-Fraud', 'Fraud'])
+        plt.title('Confusion Matrix - XGBoost')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.tight_layout()
+
+        filepath = os.path.join(PLOTS_PATH, 'confusion_matrix.png')
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        logger.info(f"Confusion matrix saved to {filepath}")
+
+
+    def _plot_feature_importance(self):
+
+        importance = self.model_named_steps.feature_importances_
+        indices = np.argsort(importance)[::-1][:20]
+
+        plt.figure(figsize=(12, 8))
+        plt.title('Feature Importance - XGBoost (Top 20)')
+        plt.barh(range(len(indices)), importance[indices], align='center')
+        plt.yticks(range(len(indices)), [self.feature_names[i] for i in indices])
+        plt.xlabel('Importance')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+
+        filepath = os.path.join(PLOTS_PATH, 'feature_importance.png')
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        logger.info(f"Feature importance plot saved to {filepath}")
+
+    def _plot_permutation_importance(self, n_repeats=30):
+        common.check_if_path_exists(PLOTS_PATH)
+        logger.info("Calculating permutation importance...")
+
+        r = permutation_importance(
+            self.model, 
+            self.X_test, 
+            self.y_test, 
+            n_repeats=n_repeats, 
+            random_state=42,
+            n_jobs=-1)
+
+        sorted_descending_idx = r.importances_mean.argsort()[::-1]
+        sorted_descending_idx = sorted_descending_idx[:20]
+
+        plt.figure(figsize=(12, 8))
+        plt.barh(
+            range(len(sorted_descending_idx)), 
+            r.importances_mean[sorted_descending_idx], 
+            xerr=r.importances_std[sorted_descending_idx],
+            color='maroon',
+            align='center')
+
+        plt.yticks(range(len(sorted_descending_idx)), [self.feature_names[i] for i in sorted_descending_idx])
+        plt.xlabel('Permutation Importance (decrease in score)')
+        plt.ylabel('Features')
+        plt.title('Permutation Feature Importance (Top 20)')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+
+        filepath = os.path.join(PLOTS_PATH, 'permutation_importance.png')
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        logger.info(f"Permutation importance plot saved to {filepath}")
+
+        return r
+
+    def evaluate_with_cross_validation(self, cv=5):
+        logger.info(f"Running {cv}-fold cross-validation...")
+
+        X_full = np.vstack([self.X_train, self.X_test])
+        y_full = np.concatenate([self.y_train, self.y_test])
+
+        cv_scores = cross_val_score(self.model, X_full, y_full, cv=cv, scoring='roc_auc')
+
+        logger.info("CROSS-VALIDATION RESULTS")
+        logger.info(f"Cross-Validation Scores: {cv_scores}")
+        logger.info(f"Mean ROC-AUC: {cv_scores.mean():.4f}")
+        logger.info(f"Std ROC-AUC: {cv_scores.std():.4f}")
+        
+        return {'cv_scores': cv_scores.tolist(),
+                'mean_score': float(cv_scores.mean()),
+                'std_score': float(cv_scores.std())}
+
+    def interpret_model_shap(self, max_samples=1000):
+        logger.info("Generating SHAP interpretations...")
+        common.check_if_path_exists(PLOTS_PATH)
+
+        try:
+            if len(self.X_test) > max_samples:
+                sample_indices = np.random.choice(len(self.X_test), max_samples, replace=False)
+                X_sample = self.X_test[sample_indices]
+            else:
+                X_sample = self.X_test
+
+            explainer = shap.TreeExplainer(self.model)
+            shap_values = explainer.shap_values(X_sample)
+
+            plt.figure(figsize=(12, 8))
+            shap.summary_plot(shap_values, X_sample, feature_names=self.feature_names, show=False)
+            plt.title('SHAP Summary Plot - XGBoost')
+            plt.tight_layout()
+            filepath = os.path.join(PLOTS_PATH, 'shap_summary.png')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+            logger.info(f"SHAP summary plot saved to {filepath}")
+
+            plt.figure(figsize=(12, 8))
+            shap.summary_plot(shap_values, X_sample, feature_names=self.feature_names,
+                              plot_type="bar", show=False)
+            plt.title('SHAP Feature Importance - XGBoost')
+            plt.tight_layout()
+            filepath = os.path.join(PLOTS_PATH, 'shap_importance.png')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+            logger.info(f"SHAP importance plot saved to {filepath}")
+
+
+            explainer_new = shap.Explainer(self.model, self.X_train[:100])
+            shap_values_new = explainer_new(X_sample[:100])
+
+            plt.figure(figsize=(12, 8))
+            shap.plots.waterfall(shap_values_new[0], max_display=15, show=False)
+            plt.title('SHAP Waterfall Plot - Single Prediction Breakdown')
+            plt.tight_layout()
+            filepath = os.path.join(PLOTS_PATH, 'shap_waterfall.png')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+            logger.info(f"SHAP waterfall plot saved to {filepath}")
+
+            mean_shap = np.abs(shap_values).mean(axis=0)
+            top_feature_idx = np.argmax(mean_shap)
+            top_feature_name = self.feature_names[top_feature_idx]
+
+            plt.figure(figsize=(10, 6))
+            shap.dependence_plot(
+                top_feature_name, 
+                shap_values, 
+                X_sample, 
+                feature_names=self.feature_names,
+                show=False)
+
+            plt.title(f'SHAP Dependence Plot - {top_feature_name}')
+            plt.tight_layout()
+            filepath = os.path.join(PLOTS_PATH, f'shap_dependence_{top_feature_name}.png')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+            logger.info(f"SHAP dependence plot saved to {filepath}")
+
+            plt.figure(figsize=(20, 3))
+            shap.force_plot(
+                explainer.expected_value, 
+                shap_values[0], 
+                X_sample[0], 
+                feature_names=self.feature_names,
+                matplotlib=True,
+                show=False)
+
+            plt.title('SHAP Force Plot - Single Prediction')
+            plt.tight_layout()
+            filepath = os.path.join(PLOTS_PATH, 'shap_force_plot.png')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+            logger.info(f"SHAP force plot saved to {filepath}")
+
+            return shap_values
+
+        except Exception as e:
+            logger.warning(f"SHAP interpretation failed (XGBoost/SHAP version compatibility issue): {e}")
+            logger.warning("Skipping SHAP plots. Feature importance from XGBoost is still available.")
+            return None
+
+    def save_metrics(self, filename="xgboost_metrics.json"):
+        common.check_if_path_exists(METRICS_PATH)
+        filepath = os.path.join(METRICS_PATH, filename)
+
+        metrics_to_save = {
+            'accuracy': float(self.metrics['accuracy']),
+            'roc_auc': float(self.metrics['roc_auc'])}
+
+        with open(filepath, 'w') as f:
+            json.dump(metrics_to_save, f, indent=4)
+
+        logger.info(f"Metrics saved to {filepath}")
+        return filepath
+    
+    def run_full_evaluation(self):
+        self._evaluate_model()
+        self._plot_confusion_matrix()
+        self._plot_feature_importance()
+
+        try:
+            self._plot_permutation_importance()
+        except Exception as e:
+            logger.warning(f"Permutation importance failed: {e}")
+
+        self.save_metrics()
+        return self.metrics
