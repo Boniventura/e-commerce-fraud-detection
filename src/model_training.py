@@ -462,3 +462,86 @@ class XGBoostModelEvaluation:
 
         self.save_metrics()
         return self.metrics
+        
+## SECTION 4: MODEL OPTIMIZATION
+class XGBoostModelOptimization:
+    def __init__(self, prepared_data):
+        self.X_train = prepared_data["X_train"]
+        self.y_train = prepared_data["y_train"]
+        self.scale_pos_weight = prepared_data["scale_pos_weight"]
+        self.feature_names = prepared_data["feature_names"]
+        self.early_stopping_rounds = 10
+        self.best_params = None
+        self.best_model = None
+        self.study = None
+
+    def optimize_hyperparameters(self, n_trials=10, cv=5, scoring='roc_auc'):
+        logger.info(f"Starting Optuna optimization with {n_trials} trials...")
+        logger.info(f"Using {cv}-fold cross-validation, optimizing for: {scoring}")
+
+        def objective(trial):
+            params = {
+                'max_depth': trial.suggest_int('max_depth', 2, 15),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'n_estimators': trial.suggest_int('n_estimators', 2, 500),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.4, 1.0),
+                'scale_pos_weight': self.scale_pos_weight,
+                'random_state': 42,
+                'eval_metric': 'logloss'}
+
+            model = XGBClassifier(**params)
+            scores = cross_val_score(model, self.X_train, self.y_train, cv=cv, scoring=scoring)
+            return scores.mean()
+
+        self.study = optuna.create_study(direction='maximize', pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=2, n_min_trials=10))
+        self.study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+        self.best_params = self.study.best_params
+        self.best_score = self.study.best_value
+
+        logger.info("OPTUNA OPTIMIZATION RESULTS")
+        logger.info(f"Best parameters: {self.best_params}")
+        logger.info(f"Best {scoring} score (CV): {self.best_score:.4f}")
+        logger.info(f"Number of finished trials: {len(self.study.trials)}")
+
+        return self.best_params
+
+    def get_best_params(self):
+        return self.best_params
+
+    def get_best_model(self):
+        return self.best_model
+
+    def get_study(self):
+        return self.study
+
+    def train_optimized_model(self, prepared_data):
+        logger.info("Training model with optimized parameters...")
+
+        optimized_params = {
+            **self.best_params,
+            'scale_pos_weight': self.scale_pos_weight,
+            'random_state': 42,
+            'eval_metric': 'logloss',
+            'verbosity' : 0}
+
+        trainer = XGBoostModelTraining(prepared_data)
+        trainer.train_xgboost(params=optimized_params)
+
+        return trainer
+
+    def save_optimization_results(self, filename="optimization_results.json"):
+        common.check_if_path_exists(METRICS_PATH)
+        filepath = os.path.join(METRICS_PATH, filename)
+
+        results = {'best_params': self.best_params,
+                    'best_score': float(self.best_score),
+                    'n_trials': len(self.study.trials)}
+
+        with open(filepath, 'w') as f:
+            json.dump(results, f, indent=4)
+
+        logger.info(f"Optimization results saved to {filepath}")
+        return filepath
