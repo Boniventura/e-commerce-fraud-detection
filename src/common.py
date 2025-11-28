@@ -1,12 +1,14 @@
 import os 
 import matplotlib.pyplot as plt
+import logging
 
+logger = logging.getLogger(__name__)
 
 def check_if_path_exists(folder_path = None):
     try:
         os.makedirs(folder_path, exist_ok=True) 
     except Exception as e:
-        print(f"Can not create the folder path: {folder_path}. Error: {e}")
+        logger.error(f"Can not create the folder path: {folder_path}. Error: {e}")
 
 
 def save_plot(folder_path = None, file_name = None):
@@ -17,7 +19,7 @@ def save_plot(folder_path = None, file_name = None):
 
         plt.savefig(full_path, dpi=300, bbox_inches='tight')
 
-        print(f"plot saved in: {full_path}")
+        logger.info(f"Plot saved in: {full_path}")
 
     except Exception as e:
-        print(f"Can not save the plot. Error: {e}")
+        logger.error(f"Can not save the plot. Error: {e}")
