@@ -17,7 +17,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class FeatureEngineering:
     def __init__(self, dataset):
         self.dataset = dataset
