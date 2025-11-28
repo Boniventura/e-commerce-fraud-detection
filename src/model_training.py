@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import shap
 import optuna
+import optuna.visualization as ov
 
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, recall_score, precision_score
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -31,6 +32,7 @@ import src.common as common
 MODELS_PATH = "models/"
 PLOTS_PATH = "plots/ModelEvaluation/"
 METRICS_PATH = "metrics/"
+OPTUNA_PLOTS_PATH = "plots/Optuna/"
 
 #|--------------------------------------------------------------|
 #|                          Main part                           |
@@ -484,7 +486,7 @@ class XGBoostModelOptimization:
                 'max_depth': trial.suggest_int('max_depth', 2, 15),
                 'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
                 'n_estimators': trial.suggest_int('n_estimators', 2, 500),
-                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 20),
                 'subsample': trial.suggest_float('subsample', 0.6, 1.0),
                 'colsample_bytree': trial.suggest_float('colsample_bytree', 0.4, 1.0),
                 'scale_pos_weight': self.scale_pos_weight,
@@ -497,6 +499,8 @@ class XGBoostModelOptimization:
 
         self.study = optuna.create_study(direction='maximize', pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=2, n_min_trials=10))
         self.study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+        self.plot_optuna_history(self.study)
 
         self.best_params = self.study.best_params
         self.best_score = self.study.best_value
@@ -531,6 +535,25 @@ class XGBoostModelOptimization:
         trainer.train_xgboost(params=optimized_params)
 
         return trainer
+    
+    def plot_optuna_history(self, study=None):
+        hist_fig = ov.plot_optimization_history(study)
+        hist_fig.update_layout(title='Optimization History')
+        common.check_if_path_exists(OPTUNA_PLOTS_PATH)
+        hist_fig.write_html(f"{OPTUNA_PLOTS_PATH}/optimization_history.html", auto_open=False)
+
+        importances_fig = ov.plot_param_importances(study)
+        importances_fig.update_layout(title='Params Importance')
+        common.check_if_path_exists(OPTUNA_PLOTS_PATH)
+        importances_fig.write_html(f"{OPTUNA_PLOTS_PATH}/Pparams_importance.html", auto_open=False)
+        
+        key_params = ['max_depth', 'learning_rate']        
+        if all(p in study.best_params for p in key_params):
+            contour_fig = ov.plot_contour(study, params=key_params)
+            contour_fig.update_layout(title=f'{key_params[0]} vs {key_params[1]}')
+            common.check_if_path_exists(OPTUNA_PLOTS_PATH)
+            importances_fig.write_html(f"{OPTUNA_PLOTS_PATH}/{key_params[0]}_vs_{key_params[1]}.html", auto_open=False)
+
 
     def save_optimization_results(self, filename="optimization_results.json"):
         common.check_if_path_exists(METRICS_PATH)
